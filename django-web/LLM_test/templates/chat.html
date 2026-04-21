@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Умный помощник</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f9fafb;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: white;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 1.25rem; color: #1f2937; }
+        .avatar-container {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #4f46e5;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            user-select: none;
+        }
+        .dropdown {
+            position: absolute;
+            top: 45px;
+            right: 0;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            min-width: 140px;
+            z-index: 1000;
+            display: none;
+        }
+        .dropdown.show {
+            display: block;
+        }
+        .dropdown-item {
+            padding: 0.5rem 1rem;
+            text-decoration: none;
+            color: #ef4444;
+            display: block;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        .dropdown-item:hover {
+            background: #fef2f2;
+        }
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+        .welcome-message {
+            color: #6b7280;
+            font-style: italic;
+            text-align: center;
+            padding: 2rem;
+            font-size: 1.1rem;
+        }
+        .message {
+            max-width: 80%;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .user-message {
+            background: #4f46e5;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .bot-message {
+            background: white;
+            color: #1f2937;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .thinking-message {
+            background: #f3f4f6;
+            color: #6b7280;
+            align-self: flex-start;
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            font-style: italic;
+
+        }
+        .input-area {
+            padding: 1rem;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 0.5rem;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 24px;
+            font-size: 1rem;
+            outline: none;
+        }
+        .input-area input:focus {
+            border-color: #4f46e5;
+        }
+        .input-area input:disabled {
+            background: #f9fafb;
+            cursor: not-allowed;
+        }
+        .input-area button {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+        .input-area button:hover:not(:disabled) {
+            background: #4338ca;
+        }
+        .input-area button:disabled {
+            background: #a5b4fc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Умный помощник</h1>
+        <div class="avatar-container" id="avatarContainer">
+            <div class="avatar" id="avatar">U</div>
+            <div class="dropdown" id="dropdownMenu">
+                <a href="#"
+                   onclick="document.getElementById('logoutForm').submit(); return false;"
+                   class="dropdown-item">
+                    Выйти
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Форма выхода -->
+    <form id="logoutForm" method="post" action="{% url 'logout' %}" style="display: none;">
+        {% csrf_token %}
+    </form>
+
+    <div class="chat-container" id="chatContainer">
+        <!-- Сообщения или приветствие -->
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="messageInput" placeholder="Введите ваше сообщение..." maxlength="1000">
+        <button id="sendButton" onclick="sendMessage()">➤</button>
+    </div>
+
+    <script>
+        // === Инициализация элементов ===
+        const avatarContainer = document.getElementById('avatarContainer');
+        const avatar = document.getElementById('avatar');
+        const dropdownMenu = document.getElementById('dropdownMenu');
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+
+        // Устанавливаем первую букву имени пользователя
+        const username = "{{ user.username }}";
+        avatar.textContent = username.charAt(0).toUpperCase();
+
+        // === Выпадающее меню ===
+        avatar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdownMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!avatarContainer.contains(e.target)) {
+                dropdownMenu.classList.remove('show');
+            }
+        });
+
+        // === Чат-логика с анимацией ===
+        async function loadHistory() {
+            try {
+                const res = await fetch('/api/history/');
+                if (!res.ok) throw new Error('Ошибка загрузки');
+                const messages = await res.json();
+
+                chatContainer.innerHTML = '';
+
+                if (messages.length === 0) {
+                    const welcome = document.createElement('div');
+                    welcome.className = 'welcome-message';
+                    welcome.textContent = 'Привет! Я ваш умный помощник. Чем могу помочь?';
+                    chatContainer.appendChild(welcome);
+                } else {
+                    messages.forEach(msg => addMessage(msg.content, msg.role));
+                }
+            } catch (e) {
+                console.error(e);
+                chatContainer.innerHTML = '<div class="welcome-message">Не удалось загрузить историю.</div>';
+            }
+        }
+
+        function addMessage(text, role) {
+            const div = document.createElement('div');
+            div.classList.add('message');
+            div.classList.add(role === 'user' ? 'user-message' : 'bot-message');
+            div.textContent = text;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || sendButton.disabled)
+                    return;
+
+            // Добавляем сообщение пользователя
+            addMessage(text, 'user');
+            messageInput.value = '';
+
+            // Создаем и показываем анимацию "модель думает"
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'thinking-message';
+            thinkingDiv.id = 'thinkingMessage';
+            thinkingDiv.textContent = 'Модель думает...';
+            chatContainer.appendChild(thinkingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            // Блокируем интерфейс во время генерации
+            sendButton.disabled = true;
+            messageInput.disabled = true;
+
+            try {
+                const response = await fetch('/send/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: JSON.stringify({ message: text })
+                });
+
+                if (!response.ok) throw new Error('Ошибка сервера');
+
+                const data = await response.json();
+
+                // Удаляем анимацию "думает"
+                const thinkingMsg = document.getElementById('thinkingMessage');
+                if (thinkingMsg) thinkingMsg.remove();
+
+                // Добавляем ответ модели
+                addMessage(data.response, 'bot');
+
+            } catch (error) {
+                // Удаляем анимацию при ошибке
+                const thinkingMsg = document.getElementById('thinkingMessage');
+                if (thinkingMsg) thinkingMsg.remove();
+
+                // Показываем сообщение об ошибке
+                addMessage('Не удалось получить ответ. Попробуйте позже.', 'bot');
+            } finally {
+                // Разблокируем интерфейс
+                sendButton.disabled = false;
+                messageInput.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !sendButton.disabled) {
+                sendMessage();
+            }
+        });
+
+        loadHistory();
+    </script>
+</body>
+</html>
